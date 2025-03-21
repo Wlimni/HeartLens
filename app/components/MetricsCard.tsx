@@ -1,8 +1,12 @@
+"use client";
+import React from "react";
+
 interface MetricsCardProps {
   title: string;
   value: number | { bpm?: number; sdnn?: number }; // Support for structured types
   unit?: string;
-  confidence?: number; // Optional confidence for cases where it's not needed
+  confidence?: number; // Optional confidence
+  className?: string; // Custom styling
 }
 
 export default function MetricsCard({
@@ -10,26 +14,26 @@ export default function MetricsCard({
   value,
   unit,
   confidence,
+  className = "",
 }: MetricsCardProps) {
   return (
-    <div className="bg-white p-4 rounded-lg shadow flex-1 min-w-[150px]">
-      <p className="text-gray-500">{title}</p>
-      <h2 className="text-2xl font-bold">
+    <div className={`p-4 rounded-lg shadow flex-1 min-w-[150px] ${className}`}>
+      <p className="text-inherit">{title}</p> {/* Inherit color from parent */}
+      <h2 className="text-2xl font-bold text-inherit">
         {typeof value === 'number' && value > 0
-          ? `${value} ${unit || ''}` // Display numeric values with optional units
+          ? `${value} ${unit || ''}`
           : typeof value === 'object' && value !== null
           ? value.bpm !== undefined
-            ? `${value.bpm} BPM` // Handle HeartRateResult
+            ? `${value.bpm} BPM`
             : value.sdnn !== undefined
             ? isNaN(value.sdnn)
-              ? '--' // Handle NaN for HRV
-              : `${value.sdnn} ms` // Handle HRVResult
+              ? '--'
+              : `${value.sdnn} ms`
             : '--'
-          : '--'}{' '}
-        {/* Fallback for undefined or invalid values */}
+          : '--'}
       </h2>
       {confidence !== undefined && (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-inherit">
           Confidence: {confidence.toFixed(1)}%
         </p>
       )}
