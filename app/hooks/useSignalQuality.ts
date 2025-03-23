@@ -6,6 +6,7 @@ interface SignalQualityResults {
   signalQuality: string;
   qualityConfidence: number;
 }
+
 export default function useSignalQuality(
   ppgData: number[]
 ): SignalQualityResults {
@@ -17,7 +18,7 @@ export default function useSignalQuality(
   useEffect(() => {
     const loadModel = async () => {
       try {
-        const loadedModel = await tf.loadLayersModel('/tfjs_model/model.json');
+        const loadedModel = await tf.loadLayersModel('/model/model.json');  // Use the older model
         modelRef.current = loadedModel;
         console.log('PPG quality assessment model loaded successfully');
       } catch (error) {
@@ -38,8 +39,8 @@ export default function useSignalQuality(
     if (!modelRef.current || signal.length < 100) return;
 
     try {
-      const features = calculateFeatures(signal);
-      const inputTensor = tf.tensor2d([features]);
+      const features = await calculateFeatures(signal);
+      const inputTensor = tf.tensor2d([features], [1, 8]);  // 8 features for the older model
       const prediction = (await modelRef.current.predict(
         inputTensor
       )) as tf.Tensor;
@@ -60,7 +61,7 @@ export default function useSignalQuality(
     }
   };
 
-  const calculateFeatures = (signal: number[]): number[] => {
+  const calculateFeatures = async (signal: number[]): Promise<number[]> => {
     if (!signal.length) return new Array(8).fill(0);
 
     // Calculate mean
@@ -77,20 +78,19 @@ export default function useSignalQuality(
     const skewness =
       cubedDiffs.reduce((sum, val) => sum + val, 0) /
       signal.length /
-      Math.pow(std, 3);
+      Math.pow(std + 1e-7, 3);
 
     // Calculate kurtosis
     const fourthPowerDiffs = signal.map((val) => Math.pow(val - mean, 4));
     const kurtosis =
       fourthPowerDiffs.reduce((sum, val) => sum + val, 0) /
       signal.length /
-      Math.pow(std, 4);
+      Math.pow(std + 1e-7, 4);
 
-    // Calculate signal range and peak-to-peak
+    // Calculate signal range
     const max = Math.max(...signal);
     const min = Math.min(...signal);
     const signalRange = max - min;
-    const peakToPeak = signalRange;
 
     // Calculate zero crossings
     let zeroCrossings = 0;
@@ -107,6 +107,9 @@ export default function useSignalQuality(
     const squaredSum = signal.reduce((sum, val) => sum + val * val, 0);
     const rms = Math.sqrt(squaredSum / signal.length);
 
+    // Calculate SNR (signal-to-noise ratio)
+    const snr = mean / (std + 1e-7);
+
     return [
       mean,
       std,
@@ -115,7 +118,7 @@ export default function useSignalQuality(
       signalRange,
       zeroCrossings,
       rms,
-      peakToPeak,
+      snr,
     ];
   };
 
