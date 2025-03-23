@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import CameraFeed from "./components/CameraFeed";
 import ChartComponent from "./components/ChartComponent";
 import MetricsCard from "./components/MetricsCard";
@@ -7,7 +7,7 @@ import SignalCombinationSelector from "./components/SignalCombinationSelector";
 import usePPGProcessing from "./hooks/usePPGProcessing";
 import useSignalQuality from "./hooks/useSignalQuality";
 import useMongoDB from "./hooks/useMongoDB";
-import Image from "next/image"; // For the favicon
+import Image from "next/image";
 
 export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
@@ -15,8 +15,8 @@ export default function Home() {
   const [signalCombination, setSignalCombination] = useState("default");
   const [currentSubject, setCurrentSubject] = useState("");
   const [confirmedSubject, setConfirmedSubject] = useState("");
-  const [isDarkMode, setIsDarkMode] = useState(true); // Default to dark mode
-  const [showConfig, setShowConfig] = useState(false); // For SignalCombinationSelector toggle
+  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [showConfig, setShowConfig] = useState(false);
 
   const {
     historicalData,
@@ -26,8 +26,8 @@ export default function Home() {
     pushDataToMongo,
   } = useMongoDB(confirmedSubject);
 
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const {
     ppgData,
@@ -41,32 +41,68 @@ export default function Home() {
 
   const { signalQuality, qualityConfidence } = useSignalQuality(ppgData);
 
+  // Start/stop camera based on isRecording
   useEffect(() => {
     if (isRecording) startCamera();
     else stopCamera();
-  }, [isRecording]);
+  }, [isRecording, startCamera, stopCamera]);
 
+  // Process frames in a loop when recording
   useEffect(() => {
-    let animationFrame;
+    let animationFrame: number | undefined;
     const processFrameLoop = () => {
       if (isRecording) {
         processFrame();
         animationFrame = requestAnimationFrame(processFrameLoop);
       }
     };
-    if (isRecording) processFrameLoop();
-    return () => cancelAnimationFrame(animationFrame);
-  }, [isRecording]);
+    if (isRecording) {
+      animationFrame = requestAnimationFrame(processFrameLoop);
+    }
+    return () => {
+      if (animationFrame !== undefined) {
+        cancelAnimationFrame(animationFrame);
+      }
+    };
+  }, [isRecording, processFrame]);
 
+  // Moved handlePushData up here, before useEffect that depends on it
+  const handlePushData = useCallback(async () => {
+    if (!confirmedSubject || ppgData.length === 0) return;
+    const recordData = {
+      subjectId: confirmedSubject,
+      heartRate: {
+        bpm: isNaN(heartRate.bpm) ? 0 : heartRate.bpm,
+        confidence: heartRate.confidence || 0,
+      },
+      hrv: {
+        sdnn: isNaN(hrv.sdnn) ? 0 : hrv.sdnn,
+        confidence: hrv.confidence || 0,
+      },
+      ppgData: ppgData,
+      timestamp: new Date(),
+    };
+    try {
+      await pushDataToMongo(recordData);
+      console.log("✅ Data successfully saved to MongoDB");
+    } catch (error: unknown) {
+      console.error(
+        "❌ Failed to save data:",
+        error instanceof Error ? error.message : "Unknown error"
+      );
+    }
+  }, [confirmedSubject, heartRate, hrv, ppgData, pushDataToMongo]);
+
+  // Push data to MongoDB periodically when sampling
   useEffect(() => {
-    let intervalId = null;
+    let intervalId: NodeJS.Timeout | null = null;
     if (isSampling && ppgData.length > 0 && confirmedSubject) {
       intervalId = setInterval(() => handlePushData(), 10000);
     }
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [isSampling, ppgData, confirmedSubject]);
+  }, [isSampling, ppgData, confirmedSubject, handlePushData]);
 
   const confirmUser = () => {
     if (currentSubject.trim()) {
@@ -93,33 +129,6 @@ export default function Home() {
     setIsSampling(!isSampling);
   };
 
-  const handlePushData = async () => {
-    if (!confirmedSubject) {
-      alert("Please enter a subject name before saving data.");
-      return;
-    }
-    if (ppgData.length === 0) return;
-    const recordData = {
-      subjectId: confirmedSubject || "unknown",
-      heartRate: {
-        bpm: isNaN(heartRate.bpm) ? 0 : heartRate.bpm,
-        confidence: heartRate.confidence || 0,
-      },
-      hrv: {
-        sdnn: isNaN(hrv.sdnn) ? 0 : hrv.sdnn,
-        confidence: hrv.confidence || 0,
-      },
-      ppgData: ppgData,
-      timestamp: new Date(),
-    };
-    try {
-      await pushDataToMongo(recordData);
-      console.log("✅ Data successfully saved to MongoDB");
-    } catch (error) {
-      console.error("❌ Failed to save data:", error.message);
-    }
-  };
-
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode);
   };
@@ -132,7 +141,7 @@ export default function Home() {
     >
       {/* Header with Centered HeartLens and Dark Mode Toggle */}
       <header className="col-span-full flex items-center justify-between mb-6">
-        <div className="flex-1"></div> {/* Spacer */}
+        <div className="flex-1"></div>
         <div className="flex items-center">
           <Image
             src="/favicon.ico"

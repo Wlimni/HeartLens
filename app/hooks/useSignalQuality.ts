@@ -1,5 +1,5 @@
 // hooks/useSignalQuality.ts
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import * as tf from '@tensorflow/tfjs';
 
 interface SignalQualityResults {
@@ -18,7 +18,7 @@ export default function useSignalQuality(
   useEffect(() => {
     const loadModel = async () => {
       try {
-        const loadedModel = await tf.loadLayersModel('/model/model.json');  // Use the older model
+        const loadedModel = await tf.loadLayersModel('/model/model.json');
         modelRef.current = loadedModel;
         console.log('PPG quality assessment model loaded successfully');
       } catch (error) {
@@ -27,23 +27,16 @@ export default function useSignalQuality(
     };
 
     loadModel();
-  }, []);
+  }, []); // No dependencies, runs once on mount
 
-  useEffect(() => {
-    if (ppgData.length >= 100) {
-      assessSignalQuality(ppgData);
-    }
-  }, [ppgData]);
-
-  const assessSignalQuality = async (signal: number[]) => {
+  // Memoize assessSignalQuality to keep it stable across renders
+  const assessSignalQuality = useCallback(async (signal: number[]) => {
     if (!modelRef.current || signal.length < 100) return;
 
     try {
       const features = await calculateFeatures(signal);
-      const inputTensor = tf.tensor2d([features], [1, 8]);  // 8 features for the older model
-      const prediction = (await modelRef.current.predict(
-        inputTensor
-      )) as tf.Tensor;
+      const inputTensor = tf.tensor2d([features], [1, 8]); // 8 features for the older model
+      const prediction = (await modelRef.current.predict(inputTensor)) as tf.Tensor;
       const probabilities = await prediction.data();
 
       const classIndex = probabilities.indexOf(Math.max(...probabilities));
@@ -59,7 +52,14 @@ export default function useSignalQuality(
     } catch (error) {
       console.error('Error assessing signal quality:', error);
     }
-  };
+  }, []); // Empty dependency array since it only depends on modelRef, which is stable via useRef
+
+  // Assess signal quality when ppgData changes
+  useEffect(() => {
+    if (ppgData.length >= 100) {
+      assessSignalQuality(ppgData);
+    }
+  }, [ppgData, assessSignalQuality]); // Added assessSignalQuality
 
   const calculateFeatures = async (signal: number[]): Promise<number[]> => {
     if (!signal.length) return new Array(8).fill(0);

@@ -1,9 +1,10 @@
+// app/hooks/useMongoDB.ts
 import { useState } from "react";
 
 const useMongoDB = (confirmedSubject: string) => {
-  const [historicalData, setHistoricalData] = useState(null);
+  const [historicalData, setHistoricalData] = useState<any>(null); // Consider typing this if possible
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null); // Explicitly typed as string | null
 
   const fetchHistoricalData = async () => {
     if (!confirmedSubject) {
@@ -22,14 +23,19 @@ const useMongoDB = (confirmedSubject: string) => {
       }
       const data = await response.json();
       setHistoricalData(data);
-    } catch (err) {
-      setError(err.message);
+    } catch (err: unknown) { // Explicitly type err as unknown
+      // Safely handle the error
+      if (err instanceof Error) {
+        setError(err.message); // Now TypeScript knows err has a message
+      } else {
+        setError("An unknown error occurred");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const pushDataToMongo = async (recordData) => {
+  const pushDataToMongo = async (recordData: any) => { // Consider typing recordData
     const payload = { ...recordData, subjectId: confirmedSubject || 'unknown' };
     const response = await fetch('/api/save-record', {
       method: 'POST',
