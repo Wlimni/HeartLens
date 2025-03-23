@@ -7,7 +7,7 @@ if (!MONGODB_URI) {
   throw new Error("Please define the MONGODB_URI environment variable in .env.local");
 }
 
-let cached = (global as any).mongoose || { conn: null, promise: null };
+const cached = (global as any).mongoose || { conn: null, promise: null }; // Changed from let to const
 if (!(global as any).mongoose) {
   (global as any).mongoose = cached;
 }
@@ -24,9 +24,15 @@ async function dbConnect() {
 
 const RecordSchema = new mongoose.Schema({
   subjectId: { type: String, required: true },
-  heartRate: { bpm: Number, confidence: Number },
-  hrv: { sdnn: Number, confidence: Number },
-  ppgData: [Number],
+  heartRate: { 
+    bpm: { type: Number, required: true }, 
+    confidence: Number 
+  },
+  hrv: { 
+    sdnn: { type: Number, required: true }, 
+    confidence: Number 
+  },
+  ppgData: { type: [Number], default: [] },
   timestamp: { type: Date, default: Date.now },
 });
 
@@ -42,7 +48,7 @@ export async function GET(request: Request) {
 
   try {
     await dbConnect();
-    const records = await Record.find({ subjectId });
+    const records = await Record.find({ subjectId }).sort({ timestamp: -1 });
 
     if (!records || records.length === 0) {
       return NextResponse.json(
@@ -51,18 +57,33 @@ export async function GET(request: Request) {
       );
     }
 
+    const validRecords = records.filter(
+      (rec) => rec.heartRate?.bpm && rec.hrv?.sdnn
+    );
+    
+    if (validRecords.length === 0) {
+      return NextResponse.json(
+        { error: "No valid health data found" },
+        { status: 404 }
+      );
+    }
+
     const avgHeartRate =
-      records.reduce((sum, rec) => sum + rec.heartRate.bpm, 0) / records.length;
+      validRecords.reduce((sum, rec) => sum + rec.heartRate.bpm, 0) / validRecords.length;
     const avgHRV =
-      records.reduce((sum, rec) => sum + rec.hrv.sdnn, 0) / records.length;
-    const lastAccess = records.sort((a, b) => b.timestamp - a.timestamp)[0].timestamp;
+      validRecords.reduce((sum, rec) => sum + rec.hrv.sdnn, 0) / validRecords.length;
+    const lastAccess = records[0].timestamp;
 
     return NextResponse.json({
       avgHeartRate: avgHeartRate.toFixed(2),
       avgHRV: avgHRV.toFixed(2),
-      lastAccess,
+      lastAccess: lastAccess.toISOString(),
     });
   } catch (error: any) {
-    return NextResponse.json({ error: "Failed to fetch data" }, { status: 500 });
+    console.error("Error fetching records:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch data", details: error.message },
+      { status: 500 }
+    );
   }
 }

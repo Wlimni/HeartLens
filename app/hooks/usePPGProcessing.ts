@@ -1,6 +1,5 @@
 // hooks/usePPGProcessing.ts
-import { useState, useRef, useEffect } from 'react';
-import * as tf from '@tensorflow/tfjs';
+import { useState, useRef } from 'react'; // Removed useEffect
 
 interface Valley {
   timestamp: Date;
@@ -16,13 +15,6 @@ interface HRVResult {
 interface HeartRateResult {
   bpm: number;
   confidence: number;
-}
-
-interface MongoRecord {
-  ppgData: number[];
-  heartRate: HeartRateResult | { bpm: 0; confidence: 0 };
-  hrv: HRVResult | { sdnn: 0; confidence: 0 };
-  timestamp: Date;
 }
 
 interface PPGProcessingResult {
