@@ -41,32 +41,32 @@ export default function Home() {
 
   const { signalQuality, qualityConfidence } = useSignalQuality(ppgData);
 
-  // Start/stop camera based on isRecording
+  // Single useEffect for camera and rendering
   useEffect(() => {
-    if (isRecording) startCamera();
-    else stopCamera();
-  }, [isRecording, startCamera, stopCamera]);
+    let animationFrameId: number | undefined;
 
-  // Process frames in a loop when recording
-  useEffect(() => {
-    let animationFrame: number | undefined;
-    const processFrameLoop = () => {
-      if (isRecording) {
-        processFrame();
-        animationFrame = requestAnimationFrame(processFrameLoop);
-      }
+    const renderLoop = () => {
+      processFrame(); // Relies on requestAnimationFrame sync
+      animationFrameId = requestAnimationFrame(renderLoop);
     };
+
     if (isRecording) {
-      animationFrame = requestAnimationFrame(processFrameLoop);
+      startCamera().then(() => {
+        animationFrameId = requestAnimationFrame(renderLoop);
+      }).catch((err) => {
+        console.error("Failed to start camera:", err);
+        setIsRecording(false);
+      });
     }
-    return () => {
-      if (animationFrame !== undefined) {
-        cancelAnimationFrame(animationFrame);
-      }
-    };
-  }, [isRecording, processFrame]);
 
-  // Moved handlePushData up here, before useEffect that depends on it
+    return () => {
+      if (animationFrameId !== undefined) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      stopCamera();
+    };
+  }, [isRecording, processFrame, startCamera, stopCamera]);
+
   const handlePushData = useCallback(async () => {
     if (!confirmedSubject || ppgData.length === 0) return;
     const recordData = {
@@ -93,7 +93,6 @@ export default function Home() {
     }
   }, [confirmedSubject, heartRate, hrv, ppgData, pushDataToMongo]);
 
-  // Push data to MongoDB periodically when sampling
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
     if (isSampling && ppgData.length > 0 && confirmedSubject) {
@@ -139,7 +138,6 @@ export default function Home() {
         isDarkMode ? "bg-gray-900" : "bg-gray-100"
       }`}
     >
-      {/* Header with Centered HeartLens and Dark Mode Toggle */}
       <header className="col-span-full flex items-center justify-between mb-6">
         <div className="flex-1"></div>
         <div className="flex items-center">
@@ -168,7 +166,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Left Column: Camera Feed */}
       <div
         className={`rounded-lg p-4 ${
           isDarkMode ? "bg-gray-700" : "bg-gray-200"
@@ -225,7 +222,6 @@ export default function Home() {
             Save Data
           </button>
         </div>
-        {/* Signal Combination Selector */}
         <button
           onClick={() => setShowConfig((prev) => !prev)}
           className={`mt-2 w-full px-4 py-2 rounded-md text-white focus:ring-2 focus:ring-cyan-500 ${
@@ -242,9 +238,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* Right Column: Chart, Metrics, User Panel */}
       <div className="grid grid-cols-1 gap-4">
-        {/* Chart Component */}
         <div
           className={`rounded-lg p-4 ${
             isDarkMode ? "bg-gray-700" : "bg-gray-200"
@@ -260,7 +254,6 @@ export default function Home() {
           <ChartComponent ppgData={ppgData} valleys={valleys} />
         </div>
 
-        {/* Metrics Cards */}
         <div className="grid grid-cols-2 gap-4">
           <MetricsCard
             title="HEART RATE"
@@ -288,7 +281,6 @@ export default function Home() {
           />
         </div>
 
-        {/* User Panel */}
         <div
           className={`rounded-lg p-4 ${
             isDarkMode ? "bg-gray-700" : "bg-gray-200"

@@ -1,4 +1,3 @@
-// hooks/useSignalQuality.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as tf from '@tensorflow/tfjs';
 
@@ -21,21 +20,21 @@ export default function useSignalQuality(
         const loadedModel = await tf.loadLayersModel('/model/model.json');
         modelRef.current = loadedModel;
         console.log('PPG quality assessment model loaded successfully');
+        loadedModel.summary(); // Log model structure to verify input shape
       } catch (error) {
         console.error('Error loading model:', error);
       }
     };
-
     loadModel();
-  }, []); // No dependencies, runs once on mount
+  }, []);
 
-  // Memoize assessSignalQuality to keep it stable across renders
+  // Memoize assessSignalQuality
   const assessSignalQuality = useCallback(async (signal: number[]) => {
     if (!modelRef.current || signal.length < 100) return;
 
     try {
       const features = await calculateFeatures(signal);
-      const inputTensor = tf.tensor2d([features], [1, 8]); // 8 features for the older model
+      const inputTensor = tf.tensor2d([features], [1, 10]); // Updated to 10 features
       const prediction = (await modelRef.current.predict(inputTensor)) as tf.Tensor;
       const probabilities = await prediction.data();
 
@@ -52,63 +51,41 @@ export default function useSignalQuality(
     } catch (error) {
       console.error('Error assessing signal quality:', error);
     }
-  }, []); // Empty dependency array since it only depends on modelRef, which is stable via useRef
+  }, []);
 
   // Assess signal quality when ppgData changes
   useEffect(() => {
     if (ppgData.length >= 100) {
       assessSignalQuality(ppgData);
     }
-  }, [ppgData, assessSignalQuality]); // Added assessSignalQuality
+  }, [ppgData, assessSignalQuality]);
 
   const calculateFeatures = async (signal: number[]): Promise<number[]> => {
-    if (!signal.length) return new Array(8).fill(0);
+    if (!signal.length) return new Array(10).fill(0); // Updated to 10
 
-    // Calculate mean
     const mean = signal.reduce((sum, val) => sum + val, 0) / signal.length;
-
-    // Calculate standard deviation
     const squaredDiffs = signal.map((val) => Math.pow(val - mean, 2));
-    const variance =
-      squaredDiffs.reduce((sum, val) => sum + val, 0) / signal.length;
+    const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / signal.length;
     const std = Math.sqrt(variance);
-
-    // Calculate skewness
     const cubedDiffs = signal.map((val) => Math.pow(val - mean, 3));
-    const skewness =
-      cubedDiffs.reduce((sum, val) => sum + val, 0) /
-      signal.length /
-      Math.pow(std + 1e-7, 3);
-
-    // Calculate kurtosis
+    const skewness = cubedDiffs.reduce((sum, val) => sum + val, 0) / signal.length / Math.pow(std + 1e-7, 3);
     const fourthPowerDiffs = signal.map((val) => Math.pow(val - mean, 4));
-    const kurtosis =
-      fourthPowerDiffs.reduce((sum, val) => sum + val, 0) /
-      signal.length /
-      Math.pow(std + 1e-7, 4);
-
-    // Calculate signal range
+    const kurtosis = fourthPowerDiffs.reduce((sum, val) => sum + val, 0) / signal.length / Math.pow(std + 1e-7, 4);
     const max = Math.max(...signal);
     const min = Math.min(...signal);
     const signalRange = max - min;
-
-    // Calculate zero crossings
     let zeroCrossings = 0;
     for (let i = 1; i < signal.length; i++) {
-      if (
-        (signal[i] >= 0 && signal[i - 1] < 0) ||
-        (signal[i] < 0 && signal[i - 1] >= 0)
-      ) {
+      if ((signal[i] >= 0 && signal[i - 1] < 0) || (signal[i] < 0 && signal[i - 1] >= 0)) {
         zeroCrossings++;
       }
     }
-
-    // Calculate RMS
     const squaredSum = signal.reduce((sum, val) => sum + val * val, 0);
     const rms = Math.sqrt(squaredSum / signal.length);
-
-    // Calculate SNR (signal-to-noise ratio)
     const snr = mean / (std + 1e-7);
+    // Added features
+    const peakCount = signal.filter((val, i) => i > 0 && i < signal.length - 1 && val > signal[i - 1] && val > signal[i + 1]).length;
+    const mad = signal.reduce((sum, val) => sum + Math.abs(val - mean), 0) / signal.length;
 
     return [
       mean,
@@ -119,6 +96,8 @@ export default function useSignalQuality(
       zeroCrossings,
       rms,
       snr,
+      peakCount,
+      mad,
     ];
   };
 
