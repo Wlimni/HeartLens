@@ -95,4 +95,31 @@ To deploy the app to a platform like Vercel:
 ├── README.md # Developer instructions (this file)
 └── package.json # Dependencies and scripts
 ```
-#### **Vercel link:** `https://vercel.com/williams-projects-b38d639d/heartlens](https://heartlens-three.vercel.app/`
+
+## Usage Instructions
+
+1. **Open the App:**
+   - Access the app via an Vercel link (`https://heartlens-three.vercel.app/`)
+
+2. **Enter Subject ID (Required):**
+   - In the "User Panel" (bottom right), enter a Subject ID (e.g., subject123).
+   - Click "Confirm User", You must do this before recording or sampling.
+  
+3. **Start Recording:**
+   - In the "Camera Feed" section (top left), click "Start Recording".
+   - Grant camera access when prompted.
+   - Stop by clicking "Stop Recording".
+  
+4. **Monitor Metrics:**
+   - View real-time data: PPG signal chart (bottom left), heart rate, HRV, and signal quality (middle right).
+   - Save Data:
+      - Click "Save Data" (green button) to manually save PPG data, heart rate, and HRV to MongoDB.
+      - Or click "Start Sampling" to auto-save every 10 seconds (click "Stop Sampling" to stop).
+     
+5. **Fetch Historical Data:**
+   - In the "User Panel," click "Fetch Historical Data" to view past records for the subject.
+     
+**Optional Features:**
+- Click "Toggle Config" to adjust signal combinations (e.g., "redOnly").
+- Click "Change Light/Dark Mode" (top right) to switch themes.
+
