@@ -95,4 +95,4 @@ To deploy the app to a platform like Vercel:
 ├── README.md # Developer instructions (this file)
 └── package.json # Dependencies and scripts
 ```
-#### **Vercel link:** `https://vercel.com/williams-projects-b38d639d/heartlens`
+#### **Vercel link:** `https://vercel.com/williams-projects-b38d639d/heartlens](https://heartlens-three.vercel.app/`
