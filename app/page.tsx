@@ -51,12 +51,14 @@ export default function Home() {
     };
 
     if (isRecording) {
-      startCamera().then(() => {
-        animationFrameId = requestAnimationFrame(renderLoop);
-      }).catch((err) => {
-        console.error("Failed to start camera:", err);
-        setIsRecording(false);
-      });
+      startCamera()
+        .then(() => {
+          animationFrameId = requestAnimationFrame(renderLoop);
+        })
+        .catch((err) => {
+          console.error("Failed to start camera:", err);
+          setIsRecording(false);
+        });
     }
 
     return () => {
@@ -68,7 +70,12 @@ export default function Home() {
   }, [isRecording, processFrame, startCamera, stopCamera]);
 
   const handlePushData = useCallback(async () => {
-    if (!confirmedSubject || ppgData.length === 0) return;
+    // Require confirmedSubject only for saving data
+    if (!confirmedSubject) {
+      alert("Please confirm a Subject ID to save data.");
+      return;
+    }
+    if (ppgData.length === 0) return;
     const recordData = {
       subjectId: confirmedSubject,
       heartRate: {
@@ -112,18 +119,10 @@ export default function Home() {
   };
 
   const handleStartRecording = () => {
-    if (!confirmedSubject) {
-      alert("Please enter a subject name before recording.");
-      return;
-    }
     setIsRecording(!isRecording);
   };
 
   const handleStartSampling = () => {
-    if (!confirmedSubject) {
-      alert("Please enter a subject name before sampling.");
-      return;
-    }
     if (!isRecording || ppgData.length === 0) return;
     setIsSampling(!isSampling);
   };
@@ -138,6 +137,7 @@ export default function Home() {
         isDarkMode ? "bg-gray-900" : "bg-gray-100"
       }`}
     >
+      {/* Header */}
       <header className="col-span-full flex items-center justify-between mb-6">
         <div className="flex-1"></div>
         <div className="flex items-center">
@@ -166,6 +166,80 @@ export default function Home() {
         </div>
       </header>
 
+      {/* User Panel (Moved to Top) */}
+      <div
+        className={`col-span-full rounded-lg p-4 ${
+          isDarkMode ? "bg-gray-700" : "bg-gray-200"
+        }`}
+      >
+        <h2
+          className={`text-lg lg:text-xl xl:text-2xl font-bold ${
+            isDarkMode ? "text-white" : "text-gray-800"
+          }`}
+        >
+          User Panel
+        </h2>
+        <input
+          type="text"
+          value={currentSubject}
+          onChange={(e) => setCurrentSubject(e.target.value)}
+          placeholder="Enter Subject ID (Optional)"
+          className={`w-full p-2 rounded-md border focus:ring-2 focus:ring-cyan-500 ${
+            isDarkMode
+              ? "border-gray-600 bg-gray-600 text-white"
+              : "border-gray-300 bg-white text-black"
+          } mb-2`}
+        />
+        <button
+          onClick={confirmUser}
+          className={`bg-blue-500 text-white px-4 py-2 rounded-md mr-2 focus:ring-2 focus:ring-cyan-500 ${
+            isDarkMode ? "bg-blue-500" : "bg-blue-400"
+          }`}
+        >
+          Confirm User
+        </button>
+        {confirmedSubject && (
+          <button
+            onClick={fetchHistoricalData}
+            className={`bg-blue-500 text-white px-4 py-2 rounded-md mr-2 focus:ring-2 focus:ring-cyan-500 ${
+              isDarkMode ? "bg-blue-500" : "bg-blue-400"
+            }`}
+          >
+            Fetch Historical Data
+          </button>
+        )}
+        {loading && (
+          <p
+            className={`mt-2 ${
+              isDarkMode ? "text-gray-300" : "text-gray-600"
+            }`}
+          >
+            Loading historical data...
+          </p>
+        )}
+        {error && (
+          <p
+            className={`mt-2 ${isDarkMode ? "text-red-500" : "text-red-600"}`}
+          >
+            Error: {error}
+          </p>
+        )}
+        {confirmedSubject && historicalData && historicalData.lastAccess && (
+          <div
+            className={`mt-2 ${isDarkMode ? "text-white" : "text-gray-800"}`}
+          >
+            <p>User: {confirmedSubject}</p>
+            <p>
+              Last Access:{" "}
+              {new Date(historicalData.lastAccess).toLocaleString()}
+            </p>
+            <p>Avg Heart Rate: {historicalData.avgHeartRate} BPM</p>
+            <p>Avg HRV: {historicalData.avgHRV} ms</p>
+          </div>
+        )}
+      </div>
+
+      {/* Camera Feed */}
       <div
         className={`rounded-lg p-4 ${
           isDarkMode ? "bg-gray-700" : "bg-gray-200"
@@ -238,6 +312,7 @@ export default function Home() {
         )}
       </div>
 
+      {/* Right Column */}
       <div className="grid grid-cols-1 gap-4">
         <div
           className={`rounded-lg p-4 ${
@@ -279,78 +354,6 @@ export default function Home() {
               isDarkMode ? "bg-gray-700 text-white" : "bg-gray-200 text-black"
             }
           />
-        </div>
-
-        <div
-          className={`rounded-lg p-4 ${
-            isDarkMode ? "bg-gray-700" : "bg-gray-200"
-          }`}
-        >
-          <h2
-            className={`text-lg lg:text-xl xl:text-2xl font-bold ${
-              isDarkMode ? "text-white" : "text-gray-800"
-            }`}
-          >
-            User Panel
-          </h2>
-          <input
-            type="text"
-            value={currentSubject}
-            onChange={(e) => setCurrentSubject(e.target.value)}
-            placeholder="Enter Subject ID"
-            className={`w-full p-2 rounded-md border focus:ring-2 focus:ring-cyan-500 ${
-              isDarkMode
-                ? "border-gray-600 bg-gray-600 text-white"
-                : "border-gray-300 bg-white text-black"
-            } mb-2`}
-          />
-          <button
-            onClick={confirmUser}
-            className={`bg-blue-500 text-white px-4 py-2 rounded-md mr-2 focus:ring-2 focus:ring-cyan-500 ${
-              isDarkMode ? "bg-blue-500" : "bg-blue-400"
-            }`}
-          >
-            Confirm User
-          </button>
-          {confirmedSubject && (
-            <button
-              onClick={fetchHistoricalData}
-              className={`bg-blue-500 text-white px-4 py-2 rounded-md mr-2 focus:ring-2 focus:ring-cyan-500 ${
-                isDarkMode ? "bg-blue-500" : "bg-blue-400"
-              }`}
-            >
-              Fetch Historical Data
-            </button>
-          )}
-          {loading && (
-            <p
-              className={`mt-2 ${
-                isDarkMode ? "text-gray-300" : "text-gray-600"
-              }`}
-            >
-              Loading historical data...
-            </p>
-          )}
-          {error && (
-            <p
-              className={`mt-2 ${isDarkMode ? "text-red-500" : "text-red-600"}`}
-            >
-              Error: {error}
-            </p>
-          )}
-          {confirmedSubject && historicalData && historicalData.lastAccess && (
-            <div
-              className={`mt-2 ${isDarkMode ? "text-white" : "text-gray-800"}`}
-            >
-              <p>User: {confirmedSubject}</p>
-              <p>
-                Last Access:{" "}
-                {new Date(historicalData.lastAccess).toLocaleString()}
-              </p>
-              <p>Avg Heart Rate: {historicalData.avgHeartRate} BPM</p>
-              <p>Avg HRV: {historicalData.avgHRV} ms</p>
-            </div>
-          )}
         </div>
       </div>
     </div>
