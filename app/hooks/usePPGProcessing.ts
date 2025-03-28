@@ -1,5 +1,5 @@
-// app/hooks/usePPGProcessing.ts
 import { useState, useRef, useCallback } from 'react';
+import useSignalQuality from './useSignalQuality';
 
 interface Valley {
   timestamp: Date;
@@ -44,6 +44,9 @@ export default function usePPGProcessing(
   const framesRef = useRef<number>(0);
   const isVideoReady = useRef<boolean>(false);
 
+  // Use the signal quality hook to assess PPG signal quality
+  const { signalQuality } = useSignalQuality(ppgData);
+
   const samplePoints = [
     { x: 0.2, y: 0.2 },
     { x: 0.8, y: 0.2 },
@@ -54,7 +57,6 @@ export default function usePPGProcessing(
 
   const startCamera = useCallback(async (): Promise<void> => {
     try {
-      // Stop any existing stream before starting a new one
       if (streamRef.current) {
         console.log('Stopping existing stream before starting a new one');
         streamRef.current.getTracks().forEach((track) => track.stop());
@@ -96,7 +98,6 @@ export default function usePPGProcessing(
 
       streamRef.current = newStream;
 
-      // Attempt to enable torch (flash) if available
       try {
         const track = newStream.getVideoTracks()[0];
         const capabilities = track.getCapabilities() as any;
@@ -157,10 +158,7 @@ export default function usePPGProcessing(
     }
 
     try {
-      // Clear the canvas to prevent flickering
       context.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Draw video frame
       context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
       console.log('Frame drawn on canvas');
 
@@ -177,7 +175,6 @@ export default function usePPGProcessing(
           bSum += pixel[2];
           validSamples++;
 
-          // Draw sample points
           context.beginPath();
           context.arc(x, y, 5, 0, 2 * Math.PI);
           context.fillStyle = 'yellow';
@@ -202,7 +199,8 @@ export default function usePPGProcessing(
 
       setPpgData((prev) => {
         const newData = [...prev.slice(-300), ppgSignal];
-        if (newData.length >= 100) {
+        // Only calculate HR and HRV if signal quality is not "bad" and we have enough data
+        if (newData.length >= 100 && signalQuality !== 'bad') {
           const newValleys = detectValleys(newData);
           setValleys(newValleys);
           const heartRateValue = calculateHeartRate(newValleys);
@@ -215,16 +213,38 @@ export default function usePPGProcessing(
     } catch (err) {
       console.error('Error in processFrame:', err);
     }
-  }, [isRecording, videoRef, canvasRef, signalCombination]);
+  }, [isRecording, videoRef, canvasRef, signalCombination, signalQuality]);
 
-  const detectValleys = (signal: number[], providedFps: number = fpsRef.current): Valley[] => {
+  const smoothSignal = (signal: number[], windowSize: number = 5): number[] => {
+    return signal.map((_, i) => {
+      const start = Math.max(0, i - windowSize + 1);
+      const window = signal.slice(start, i + 1);
+      return window.reduce((sum, val) => sum + val, 0) / window.length;
+    });
+  };
+
+  const detectValleys = (signal: number[], providedFps: number = 30): Valley[] => {
     const valleys: Valley[] = [];
-    const minValleyDistance = Math.floor(providedFps * 0.4);
+    const minValleyDistance = Math.floor(providedFps * 0.4); // Minimum 400 ms between valleys
     const windowSize = Math.floor(providedFps * 0.5);
-    const normalizedSignal = normalizeSignal(signal);
 
-    for (let i = windowSize; i < normalizedSignal.length - windowSize; i++) {
-      if (isLocalMinimum(normalizedSignal, i, windowSize)) {
+    // Smooth the signal to reduce noise
+    const smoothedSignal = smoothSignal(signal, 5);
+    console.log('Smoothed Signal (first 20):', smoothedSignal.slice(0, 20)); // Debug: Log first 20 values
+
+    // Calculate mean and std for threshold
+    const meanSignal = smoothedSignal.reduce((sum, val) => sum + val, 0) / smoothedSignal.length;
+    const stdSignal = Math.sqrt(
+      smoothedSignal.reduce((sum, val) => sum + Math.pow(val - meanSignal, 2), 0) / smoothedSignal.length
+    );
+    const threshold = meanSignal - stdSignal; // Valleys must be below mean - 1 STD
+
+    for (let i = windowSize; i < smoothedSignal.length - windowSize; i++) {
+      if (
+        smoothedSignal[i] < smoothedSignal[i - 1] &&
+        smoothedSignal[i] < smoothedSignal[i + 1] &&
+        smoothedSignal[i] < threshold
+      ) {
         if (valleys.length === 0 || i - valleys[valleys.length - 1].index >= minValleyDistance) {
           valleys.push({
             timestamp: new Date(Date.now() - ((signal.length - i) / providedFps) * 1000),
@@ -234,19 +254,8 @@ export default function usePPGProcessing(
         }
       }
     }
+    console.log('Detected Valleys:', valleys); // Debug: Log detected valleys
     return valleys;
-  };
-
-  const normalizeSignal = (signal: number[]): number[] => {
-    const min = Math.min(...signal);
-    const max = Math.max(...signal);
-    return signal.map((value) => (value - min) / (max - min));
-  };
-
-  const isLocalMinimum = (signal: number[], index: number, windowSize: number): boolean => {
-    const leftWindow = signal.slice(Math.max(0, index - windowSize), index);
-    const rightWindow = signal.slice(index + 1, Math.min(signal.length, index + windowSize + 1));
-    return Math.min(...leftWindow) >= signal[index] && Math.min(...rightWindow) > signal[index];
   };
 
   const calculateHeartRate = (valleys: Valley[]): HeartRateResult => {
@@ -268,7 +277,9 @@ export default function usePPGProcessing(
   const calculateHRV = (valleys: Valley[]): HRVResult => {
     if (valleys.length < 2) return { sdnn: 0, confidence: 0 };
     const rrIntervals = valleys.slice(1).map((_, i) => valleys[i + 1].timestamp.getTime() - valleys[i].timestamp.getTime());
+    console.log('RR Intervals (ms):', rrIntervals); // Debug: Log RR intervals
     const validIntervals = rrIntervals.filter(interval => interval >= 250 && interval <= 2000);
+    console.log('Valid RR Intervals (ms):', validIntervals); // Debug: Log filtered intervals
     if (validIntervals.length === 0) return { sdnn: 0, confidence: 0 };
     const meanRR = validIntervals.reduce((sum, rr) => sum + rr, 0) / validIntervals.length;
     const squaredDifferences = validIntervals.map((rr) => Math.pow(rr - meanRR, 2));
