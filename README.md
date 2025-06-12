@@ -123,3 +123,8 @@ To deploy the app to a platform like Vercel:
 - Click "Toggle Config" to adjust signal combinations (e.g., "redOnly").
 - Click "Change Light/Dark Mode" (top right) to switch themes.
 
+
+
+Heat is the amount of energy __________ due to the temperature difference between two objects
+Heat transferred from hotter objects to colder objects
+Unit:_________
