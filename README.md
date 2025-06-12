@@ -124,6 +124,12 @@ To deploy the app to a platform like Vercel:
 - Click "Change Light/Dark Mode" (top right) to switch themes.
 
 
+Internal energy
+It is the total energy ______ in a object (KE + PE)
+uniit of energy: ____
+∝ mass, _________
+∝ mass, _________
+Average KE has the same physical meaning as ____________
 
 Heat is the amount of energy __________ due to the temperature difference between two objects
 Heat transferred from hotter objects to colder objects
